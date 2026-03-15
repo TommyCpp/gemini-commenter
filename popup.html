@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      width: 220px;
+      padding: 12px;
+      margin: 0;
+      font-family: 'Google Sans', Roboto, Arial, sans-serif;
+      font-size: 13px;
+      color: #202124;
+    }
+    h3 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .gc-popup-status {
+      color: #5f6368;
+      margin-bottom: 12px;
+    }
+    .gc-popup-btn {
+      display: block;
+      width: 100%;
+      padding: 8px 12px;
+      margin-bottom: 8px;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      background: #fff;
+      color: #202124;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s;
+    }
+    .gc-popup-btn:hover {
+      background: #f1f3f4;
+    }
+    .gc-popup-btn--danger {
+      color: #c5221f;
+    }
+    .gc-popup-btn--danger:hover {
+      background: #fce8e6;
+    }
+    .gc-popup-note {
+      color: #9aa0a6;
+      font-size: 11px;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h3>Gemini Commenter</h3>
+  <div class="gc-popup-status" id="status">Loading...</div>
+  <button class="gc-popup-btn" id="togglePanel">Toggle Comment Panel</button>
+  <button class="gc-popup-btn gc-popup-btn--danger" id="clearComments">Clear All Comments</button>
+  <div class="gc-popup-note">Works on gemini.google.com</div>
+  <script src="popup.js"></script>
+</body>
+</html>
