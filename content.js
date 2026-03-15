@@ -20,7 +20,7 @@
       m.style.backgroundColor = val ? 'transparent' : '';
     });
     // Update FAB appearance
-    const fab = document.querySelector('.gc-fab');
+    const fab = Overlay.querySelector('.gc-fab');
     if (fab) fab.classList.toggle('gc-fab--disabled', val);
   }
 
@@ -29,12 +29,128 @@
       chrome.storage.local.get('gc_disabled', result => {
         gcDisabled = result.gc_disabled || false;
         document.body.classList.toggle('gc-disabled', gcDisabled);
-        const fab = document.querySelector('.gc-fab');
+        const fab = Overlay.querySelector('.gc-fab');
         if (fab) fab.classList.toggle('gc-fab--disabled', gcDisabled);
         resolve(gcDisabled);
       });
     });
   }
+
+  // =========================================================================
+  // Shadow DOM Overlay - isolates all floating UI from Gemini's styles
+  // =========================================================================
+
+  const Overlay = (() => {
+    let host, shadow;
+
+    function init() {
+      host = document.createElement('div');
+      host.id = 'gc-overlay-host';
+      host.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;z-index:10000;pointer-events:none;';
+      document.body.appendChild(host);
+      shadow = host.attachShadow({ mode: 'open' });
+
+      const style = document.createElement('style');
+      style.textContent = `
+        :host { all: initial; }
+        * { box-sizing: border-box; }
+
+        /* Popover */
+        .gc-popover {
+          position: fixed; z-index: 10000;
+          background: #303134; border: 1px solid #5f6368; border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.4); padding: 4px;
+          display: flex; gap: 4px; pointer-events: auto;
+          animation: gc-fade-in 0.15s ease-out;
+        }
+        @keyframes gc-fade-in {
+          from { opacity: 0; transform: translateY(4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .gc-popover-btn {
+          display: flex; align-items: center; gap: 6px;
+          padding: 6px 12px; border: none; border-radius: 6px;
+          background: #8ab4f8; color: #202124; font-size: 13px;
+          font-family: 'Google Sans', Roboto, Arial, sans-serif;
+          cursor: pointer; white-space: nowrap; transition: background 0.15s;
+        }
+        .gc-popover-btn:hover { background: #aecbfa; }
+        .gc-popover-btn svg { width: 14px; height: 14px; fill: currentColor; }
+
+        /* Inline Comment Input */
+        .gc-inline-input {
+          position: fixed; z-index: 10001;
+          background: #303134; border: 1px solid #5f6368; border-radius: 8px;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.4); padding: 12px; width: 300px;
+          pointer-events: auto; animation: gc-fade-in 0.15s ease-out;
+        }
+        .gc-inline-input textarea {
+          width: 100%; min-height: 60px; border: 1px solid #5f6368;
+          border-radius: 6px; padding: 8px; font-size: 13px;
+          font-family: 'Google Sans', Roboto, Arial, sans-serif;
+          resize: vertical; outline: none; box-sizing: border-box;
+          background: #1e1f20; color: #e3e3e3;
+        }
+        .gc-inline-input textarea:focus { border-color: #8ab4f8; }
+        .gc-inline-input textarea::placeholder { color: #9aa0a6; }
+        .gc-inline-actions {
+          display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;
+        }
+        .gc-inline-actions button {
+          padding: 6px 16px; border-radius: 6px; font-size: 13px;
+          font-family: 'Google Sans', Roboto, Arial, sans-serif;
+          cursor: pointer; border: 1px solid #5f6368;
+          background: #303134; color: #e3e3e3; transition: background 0.15s;
+        }
+        .gc-inline-actions button:hover { background: #3c4043; }
+        .gc-inline-actions button.gc-btn-primary {
+          background: #8ab4f8; color: #202124; border-color: #8ab4f8;
+        }
+        .gc-inline-actions button.gc-btn-primary:hover { background: #aecbfa; }
+        .gc-inline-actions button.gc-btn-primary:disabled {
+          background: #394457; border-color: #394457; color: #5f6368; cursor: not-allowed;
+        }
+
+        /* Overlap Tooltip */
+        .gc-overlap-tooltip {
+          position: fixed; z-index: 10002;
+          background: #e3e3e3; color: #202124; padding: 6px 10px;
+          border-radius: 6px; font-size: 12px; pointer-events: none;
+          font-family: 'Google Sans', Roboto, Arial, sans-serif;
+          white-space: nowrap; animation: gc-fade-in 0.15s ease-out;
+        }
+
+        /* FAB */
+        .gc-fab {
+          position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+          width: 48px; height: 48px; border-radius: 50%;
+          background: #8ab4f8; color: #202124; border: none; cursor: pointer;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+          display: flex; align-items: center; justify-content: center;
+          transition: background 0.15s, transform 0.15s; pointer-events: auto;
+        }
+        .gc-fab:hover { background: #aecbfa; transform: scale(1.05); }
+        .gc-fab svg { width: 24px; height: 24px; fill: currentColor; }
+        .gc-fab-badge {
+          position: absolute; top: -4px; right: -4px;
+          background: #ea4335; color: #fff; font-size: 11px; font-weight: 600;
+          min-width: 18px; height: 18px; line-height: 18px; border-radius: 9px;
+          text-align: center; padding: 0 4px;
+          font-family: 'Google Sans', Roboto, Arial, sans-serif;
+        }
+        .gc-fab.gc-fab--disabled { background: #5f6368; opacity: 0.6; }
+        .gc-fab.gc-fab--disabled:hover { background: #5f6368; }
+      `;
+      shadow.appendChild(style);
+    }
+
+    function getRoot() { return shadow; }
+    function append(el) { shadow.appendChild(el); }
+    function remove(el) { if (el && el.parentNode === shadow) shadow.removeChild(el); }
+    function querySelector(sel) { return shadow.querySelector(sel); }
+
+    return { init, getRoot, append, remove, querySelector };
+  })();
 
   // =========================================================================
   // Utility
@@ -283,11 +399,11 @@
     let inlineInput = null;
 
     function removePopover() {
-      if (popover) { popover.remove(); popover = null; }
+      if (popover) { Overlay.remove(popover); popover = null; }
     }
 
     function removeInlineInput() {
-      if (inlineInput) { inlineInput.remove(); inlineInput = null; }
+      if (inlineInput) { Overlay.remove(inlineInput); inlineInput = null; }
     }
 
     function showOverlapTooltip(x, y) {
@@ -296,8 +412,8 @@
       tip.textContent = 'Cannot overlap existing highlights';
       tip.style.left = x + 'px';
       tip.style.top = (y - 32) + 'px';
-      document.body.appendChild(tip);
-      setTimeout(() => tip.remove(), 2000);
+      Overlay.append(tip);
+      setTimeout(() => Overlay.remove(tip), 2000);
     }
 
     function showInlineInput(range, responseEl) {
@@ -306,8 +422,8 @@
 
       const container = document.createElement('div');
       container.className = 'gc-inline-input';
-      container.style.left = rect.left + window.scrollX + 'px';
-      container.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+      container.style.left = rect.left + 'px';
+      container.style.top = (rect.bottom + 8) + 'px';
 
       const textarea = document.createElement('textarea');
       textarea.placeholder = 'Add your comment...';
@@ -381,15 +497,21 @@
       actions.appendChild(saveBtn);
       container.appendChild(textarea);
       container.appendChild(actions);
-      document.body.appendChild(container);
+      Overlay.append(container);
       inlineInput = container;
       textarea.focus();
+    }
+
+    function isOwnUI(e) {
+      // Check if click is on our shadow DOM hosts
+      const path = e.composedPath();
+      return path.some(el => el.id === 'gc-overlay-host' || el.id === 'gc-panel-host');
     }
 
     function onMouseUp(e) {
       if (gcDisabled) return;
       // Don't interfere with our own UI
-      if (e.target.closest('.gc-popover, .gc-inline-input, .gc-panel, .gc-fab')) return;
+      if (isOwnUI(e)) return;
 
       removePopover();
 
@@ -407,8 +529,8 @@
       const rect = range.getBoundingClientRect();
       const pop = document.createElement('div');
       pop.className = 'gc-popover';
-      pop.style.left = (rect.left + rect.width / 2 - 60 + window.scrollX) + 'px';
-      pop.style.top = (rect.top + window.scrollY - 40) + 'px';
+      pop.style.left = (rect.left + rect.width / 2 - 60) + 'px';
+      pop.style.top = (rect.top - 40) + 'px';
 
       const btn = document.createElement('button');
       btn.className = 'gc-popover-btn';
@@ -426,16 +548,14 @@
       });
 
       pop.appendChild(btn);
-      document.body.appendChild(pop);
+      Overlay.append(pop);
       popover = pop;
     }
 
     function onMouseDown(e) {
-      if (e.target.closest('.gc-popover, .gc-inline-input')) return;
+      if (isOwnUI(e)) return;
       removePopover();
-      if (!e.target.closest('.gc-inline-input')) {
-        removeInlineInput();
-      }
+      removeInlineInput();
     }
 
     function init() {
@@ -461,7 +581,7 @@
       fab.title = 'Gemini Commenter';
       fab.innerHTML = `<svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4V4c0-1.1-.9-2-2-2zm0 15.17L18.83 16H4V4h16v13.17z"/></svg>`;
       fab.addEventListener('click', toggle);
-      document.body.appendChild(fab);
+      Overlay.append(fab);
       updateBadge();
     }
 
@@ -971,6 +1091,7 @@
   // =========================================================================
 
   async function init() {
+    Overlay.init();
     await loadDisabledState();
     SelectionWatcher.init();
     PanelUI.init();
