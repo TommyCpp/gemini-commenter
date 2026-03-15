@@ -6,6 +6,37 @@
   window.__gcCommenterLoaded = true;
 
   // =========================================================================
+  // Disabled State
+  // =========================================================================
+
+  let gcDisabled = false;
+
+  function setDisabled(val) {
+    gcDisabled = val;
+    chrome.storage.local.set({ gc_disabled: val });
+    document.body.classList.toggle('gc-disabled', val);
+    // Hide/show all highlights
+    document.querySelectorAll('mark.gc-highlight').forEach(m => {
+      m.style.backgroundColor = val ? 'transparent' : '';
+    });
+    // Update FAB appearance
+    const fab = document.querySelector('.gc-fab');
+    if (fab) fab.classList.toggle('gc-fab--disabled', val);
+  }
+
+  function loadDisabledState() {
+    return new Promise(resolve => {
+      chrome.storage.local.get('gc_disabled', result => {
+        gcDisabled = result.gc_disabled || false;
+        document.body.classList.toggle('gc-disabled', gcDisabled);
+        const fab = document.querySelector('.gc-fab');
+        if (fab) fab.classList.toggle('gc-fab--disabled', gcDisabled);
+        resolve(gcDisabled);
+      });
+    });
+  }
+
+  // =========================================================================
   // Utility
   // =========================================================================
 
@@ -356,6 +387,7 @@
     }
 
     function onMouseUp(e) {
+      if (gcDisabled) return;
       // Don't interfere with our own UI
       if (e.target.closest('.gc-popover, .gc-inline-input, .gc-panel, .gc-fab')) return;
 
@@ -450,6 +482,113 @@
     }
 
     function createPanel() {
+      // Use Shadow DOM to isolate from Gemini's styles
+      const host = document.createElement('div');
+      host.id = 'gc-panel-host';
+      host.style.cssText = 'position:fixed;top:0;right:0;z-index:10000;height:100vh;width:0;pointer-events:none;';
+      document.body.appendChild(host);
+      const shadow = host.attachShadow({ mode: 'open' });
+
+      // Inject panel styles directly into shadow DOM
+      const style = document.createElement('style');
+      style.textContent = `
+        :host { all: initial; }
+        .gc-panel {
+          position: fixed; top: 0; right: 0; z-index: 10000;
+          width: 320px; height: 100vh;
+          background: #1e1f20; color: #e3e3e3;
+          border-left: 1px solid #3c4043;
+          box-shadow: -2px 0 12px rgba(0,0,0,0.3);
+          display: flex; flex-direction: column;
+          transform: translateX(100%);
+          transition: transform 0.25s ease-out;
+          font-family: 'Google Sans', Roboto, Arial, sans-serif;
+          pointer-events: auto;
+          box-sizing: border-box;
+        }
+        .gc-panel.gc-panel--open { transform: translateX(0); }
+        .gc-panel-header {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 16px; border-bottom: 1px solid #3c4043; flex-shrink: 0;
+          background: #1e1f20;
+        }
+        .gc-panel-title { font-size: 16px; font-weight: 600; color: #e3e3e3; }
+        .gc-panel-close {
+          width: 32px; height: 32px; border: none; background: none;
+          border-radius: 50%; cursor: pointer; display: flex;
+          align-items: center; justify-content: center; color: #9aa0a6;
+          transition: background 0.15s;
+        }
+        .gc-panel-close:hover { background: #3c4043; }
+        .gc-panel-close svg { width: 18px; height: 18px; fill: currentColor; }
+        .gc-panel-list {
+          flex: 1; overflow-y: auto; padding: 8px; background: #1e1f20;
+        }
+        .gc-panel-empty {
+          text-align: center; color: #9aa0a6; font-size: 13px;
+          padding: 32px 16px; line-height: 1.5;
+        }
+        .gc-comment-card {
+          background: #282a2c; border: 1px solid #3c4043; border-radius: 8px;
+          padding: 12px; margin-bottom: 8px; cursor: pointer;
+          transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .gc-comment-card:hover {
+          border-color: #8ab4f8; box-shadow: 0 1px 4px rgba(138,180,248,0.15);
+        }
+        .gc-comment-card.gc-comment-card--active {
+          border-color: #8ab4f8; box-shadow: 0 1px 6px rgba(138,180,248,0.2);
+        }
+        .gc-comment-quote {
+          font-size: 12px; color: #9aa0a6; font-style: italic;
+          margin-bottom: 6px; padding-left: 8px; border-left: 3px solid #5f6368;
+          line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .gc-comment-text {
+          font-size: 13px; color: #e3e3e3; line-height: 1.4; margin-bottom: 8px;
+        }
+        .gc-comment-actions { display: flex; gap: 4px; }
+        .gc-comment-action-btn {
+          padding: 4px 8px; border: none; border-radius: 4px; background: none;
+          color: #9aa0a6; font-size: 11px; cursor: pointer;
+          transition: background 0.15s, color 0.15s;
+        }
+        .gc-comment-action-btn:hover { background: #3c4043; color: #e3e3e3; }
+        .gc-comment-action-btn.gc-comment-action-btn--danger:hover {
+          background: #442c2e; color: #f28b82;
+        }
+        .gc-comment-edit-area {
+          width: 100%; min-height: 50px; border: 1px solid #5f6368;
+          border-radius: 6px; padding: 6px 8px; font-size: 13px;
+          font-family: 'Google Sans', Roboto, Arial, sans-serif;
+          resize: vertical; outline: none; margin-bottom: 8px;
+          box-sizing: border-box; background: #1e1f20; color: #e3e3e3;
+        }
+        .gc-comment-edit-area:focus { border-color: #8ab4f8; }
+        .gc-panel-footer {
+          padding: 12px 16px; border-top: 1px solid #3c4043;
+          flex-shrink: 0; background: #1e1f20;
+        }
+        .gc-send-btn {
+          width: 100%; padding: 10px 16px; border: none; border-radius: 8px;
+          background: #8ab4f8; color: #202124; font-size: 14px; font-weight: 500;
+          font-family: 'Google Sans', Roboto, Arial, sans-serif;
+          cursor: pointer; transition: background 0.15s;
+        }
+        .gc-send-btn:hover { background: #aecbfa; }
+        .gc-send-btn:disabled { background: #394457; color: #5f6368; cursor: not-allowed; }
+        .gc-auto-send-row {
+          display: flex; align-items: center; gap: 8px; margin-top: 8px;
+          font-size: 12px; color: #9aa0a6;
+        }
+        .gc-auto-send-row input[type="checkbox"] { accent-color: #8ab4f8; }
+        .gc-drag-handle { cursor: grab; color: #5f6368; margin-right: 4px; user-select: none; }
+        .gc-comment-card.gc-dragging { opacity: 0.5; border-style: dashed; }
+        .gc-comment-card.gc-drag-over { border-color: #8ab4f8; border-top-width: 3px; }
+      `;
+      shadow.appendChild(style);
+
       panel = document.createElement('div');
       panel.className = 'gc-panel';
 
@@ -492,7 +631,7 @@
       panel.appendChild(header);
       panel.appendChild(list);
       panel.appendChild(footer);
-      document.body.appendChild(panel);
+      shadow.appendChild(panel);
     }
 
     function toggle(forceOpen) {
@@ -784,12 +923,13 @@
       if (!commentId) return;
 
       PanelUI.toggle(true);
-      // Highlight the corresponding card
+      // Highlight the corresponding card in shadow DOM
       setTimeout(() => {
-        const card = document.querySelector(`.gc-panel .gc-comment-card`);
-        const panel = document.querySelector('.gc-panel-list');
-        if (!panel) return;
-        const cards = panel.querySelectorAll('.gc-comment-card');
+        const host = document.getElementById('gc-panel-host');
+        if (!host || !host.shadowRoot) return;
+        const listEl = host.shadowRoot.querySelector('.gc-panel-list');
+        if (!listEl) return;
+        const cards = listEl.querySelectorAll('.gc-comment-card');
         const comments = CommentStore.getAll();
         const idx = comments.findIndex(c => c.id === commentId);
         if (idx >= 0 && cards[idx]) {
@@ -810,14 +950,17 @@
       PanelUI.toggle();
       sendResponse({ open: PanelUI.getIsOpen() });
     } else if (msg.action === 'clearComments') {
-      // Remove all highlights
       CommentStore.getAll().forEach(c => Highlighter.removeHighlight(c.id));
       CommentStore.clearAll();
       sendResponse({ ok: true });
+    } else if (msg.action === 'toggleDisabled') {
+      setDisabled(!gcDisabled);
+      sendResponse({ disabled: gcDisabled });
     } else if (msg.action === 'getState') {
       sendResponse({
         commentCount: CommentStore.getAll().length,
         panelOpen: PanelUI.getIsOpen(),
+        disabled: gcDisabled,
       });
     }
     return true;
@@ -828,11 +971,12 @@
   // =========================================================================
 
   async function init() {
+    await loadDisabledState();
     SelectionWatcher.init();
     PanelUI.init();
     initHighlightClickHandler();
     await CommentStore.load();
-    Highlighter.applyAll();
+    if (!gcDisabled) Highlighter.applyAll();
     initObserver();
   }
 

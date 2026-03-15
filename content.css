@@ -200,6 +200,15 @@ mark.gc-highlight.gc-highlight--pulse {
   transform: scale(1.05) !important;
 }
 
+.gc-fab.gc-fab--disabled {
+  background: #5f6368 !important;
+  opacity: 0.6 !important;
+}
+
+.gc-fab.gc-fab--disabled:hover {
+  background: #5f6368 !important;
+}
+
 .gc-fab svg {
   width: 24px !important;
   height: 24px !important;
