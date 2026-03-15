@@ -925,6 +925,17 @@
         updateBadge();
         if (isOpen) renderList();
       });
+
+      // Click outside panel to close
+      document.addEventListener('mousedown', e => {
+        if (!isOpen) return;
+        const path = e.composedPath();
+        const clickedPanel = path.some(el => el.id === 'gc-panel-host');
+        const clickedFab = path.some(el => el.classList && el.classList.contains('gc-fab'));
+        if (!clickedPanel && !clickedFab) {
+          toggle(false);
+        }
+      });
     }
 
     return { init, toggle, getIsOpen, renderList };
